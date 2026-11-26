@@ -1,76 +1,41 @@
-/*
- * ECLIPSE: Little Wonders of Aetheria
- * Phase 3-15: title menu, 3D world (GU), combat, quests, crafting, pets, save/load.
- */
 #include <pspkernel.h>
-#include "system.h"
-#include "gfx.h"
-#include "input.h"
-#include "locale.h"
-#include "menu.h"
+#include <pspdebug.h>
+#include <pspctrl.h>
+#include <stdlib.h>
+#include <time.h>
 #include "game.h"
-#include "gamestate.h"
-#include "savefile.h"
 
-PSP_MODULE_INFO("ECLIPSE", PSP_MODULE_USER, 0, 3);
-PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_USER);
-PSP_HEAP_SIZE_KB(-1024);
+PSP_MODULE_INFO("Fantasy RPG Starter", 0, 1, 0);
+PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
 
-typedef enum { ST_TITLE, ST_GAME } AppState;
+int main(void) {
+    Game game;
+    SceCtrlData pad;
+    unsigned int previous = 0;
+    pspDebugScreenInit();
+    sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
+    srand((unsigned int)time(NULL));
+    game_init(&game);
+    game_load(&game);
 
-static GameState gs;
+    while (1) {
+        sceCtrlReadBufferPositive(&pad, 1);
+        unsigned int pressed = pad.Buttons & ~previous;
+        previous = pad.Buttons;
 
-static int load_first_slot(void)
-{
-    for (int i = 0; i < SAVE_SLOTS; i++) {
-        if (savefile_read(i, &gs)) return 1;
+        if (pressed & PSP_CTRL_UP) game_move(&game, 0, -1);
+        if (pressed & PSP_CTRL_DOWN) game_move(&game, 0, 1);
+        if (pressed & PSP_CTRL_LEFT) game_move(&game, -1, 0);
+        if (pressed & PSP_CTRL_RIGHT) game_move(&game, 1, 0);
+        if (pressed & PSP_CTRL_CROSS) game_attack(&game);
+        if (pressed & PSP_CTRL_TRIANGLE) game_save(&game);
+        if (pressed & PSP_CTRL_START) break;
+
+        game_update(&game);
+        pspDebugScreenClear();
+        game_draw(&game);
+        sceKernelDelayThread(80000);
     }
-    return 0;
-}
-
-int main(void)
-{
-    system_init();
-    input_init();
-    gfx_init();
-    loc_set(LANG_TH);
-    menu_init();
-
-    AppState state = ST_TITLE;
-    int paused = 0;
-    InputState in;
-
-    for (;;) {
-        input_update(&in);
-
-        if (state == ST_TITLE) {
-            MenuAction act = menu_update(&in);
-            if (act == MENU_ACT_EXIT) break;
-            if (act == MENU_ACT_START) {
-                game_new(&gs);
-                game_begin(&gs);
-                game_menu_reset();
-                paused = 0;
-                state = ST_GAME;
-            } else if (act == MENU_ACT_LOAD) {
-                if (load_first_slot()) { game_begin(&gs); game_menu_reset(); paused = 0; state = ST_GAME; }
-            }
-            menu_draw();
-            continue;
-        }
-
-        /* ST_GAME */
-        if (in.pressed & PSP_CTRL_START) paused = !paused;
-        if (!paused && game_menu_wanted()) paused = 1;
-        if (paused) game_menu_update(&gs, &in);
-        else        game_update(&gs, &in);
-
-        gfx_begin_frame(game_sky_color(&gs));
-        game_draw(&gs);
-        if (paused) game_menu_draw(&gs);
-        gfx_end_frame();
-    }
-
     sceKernelExitGame();
     return 0;
 }

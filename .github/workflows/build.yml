@@ -1,58 +1,25 @@
-name: Build EBOOT
+name: Build PSP Homebrew
 
 on:
-  push:
   workflow_dispatch:
+  push:
+    branches: [main, master]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Host unit tests (portable core)
-        run: sh tests/run_tests.sh
-
-      - name: Build with PSP SDK (pspdev)
-        run: docker run --rm -v "$PWD":/src -w /src pspdev/pspdev:latest make
-
-      - name: Upload EBOOT.PBP
+      - uses: actions/checkout@v4
+      - name: Build with PSPDEV container
+        run: |
+          docker run --rm \
+            -v "$PWD:/src" \
+            -w /src \
+            pspdev/pspdev:latest \
+            sh -lc 'export PSPDEV=/usr/local/pspdev; export PATH="$PSPDEV/bin:$PATH"; make clean || true; make'
+      - name: Upload EBOOT
         uses: actions/upload-artifact@v4
         with:
-          name: EBOOT
+          name: FantasyRPG-EBOOT
           path: EBOOT.PBP
           if-no-files-found: error
-
-  smoke:
-    needs: build
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download EBOOT
-        uses: actions/download-artifact@v4
-        with:
-          name: EBOOT
-          path: out
-
-      - name: Install PPSSPP (Flathub) and virtual display
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y flatpak xvfb imagemagick mesa-utils
-          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          sudo flatpak install -y --noninteractive flathub org.ppsspp.PPSSPP
-          sudo flatpak override --filesystem=host org.ppsspp.PPSSPP
-
-      - name: Run EBOOT in PPSSPP
-        run: sh tests/ppsspp_smoke.sh out/EBOOT.PBP smoke_out
-
-      - name: Upload screenshot and logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: smoke-screenshot
-          path: smoke_out
-          if-no-files-found: warn

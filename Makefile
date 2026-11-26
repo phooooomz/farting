@@ -1,21 +1,13 @@
-# ECLIPSE: Little Wonders of Aetheria
-# Build with the PSP SDK (pspdev). Output: EBOOT.PBP
+TARGET = FantasyRPG
+OBJS = src/main.o src/game.o
 
-TARGET = eclipse
-SRCS = $(wildcard src/*.c) $(wildcard src/core/*.c)
-OBJS = $(SRCS:.c=.o)
-
-INCDIR = src
-CFLAGS = -O2 -G0 -Wall -Wextra -Wno-unused-parameter -std=gnu99 -Isrc -Isrc/core
-CXXFLAGS = $(CFLAGS)
+INCDIR =
+CFLAGS = -O2 -G0 -Wall -Wextra
+CXXFLAGS = $(CFLAGS) -fno-exceptions
 ASFLAGS = $(CFLAGS)
-
-PSP_EBOOT_TITLE = ECLIPSE: Little Wonders of Aetheria
-PSP_FW_VERSION = 371
-
-LIBS = -lpspgu -lpspgum -lpspdisplay -lpspctrl -lpspkernel -lm
+LIBS =
 
 EXTRA_TARGETS = EBOOT.PBP
+PSP_EBOOT_TITLE = Fantasy RPG - Starter
 
-PSPSDK = $(shell psp-config --pspsdk-path)
 include $(PSPSDK)/lib/build.mak
