@@ -1,0 +1,455 @@
+{
+  "image": "player.png",
+  "cell": {
+    "w": 48,
+    "h": 48
+  },
+  "anchor_note": "cell 48x48 ยังไม่ crop, ตัวละครอยู่ประมาณ x 12-39, y 19-48 ในแต่ละ cell",
+  "tags": [
+    {
+      "name": "Hit_Down",
+      "row": 0,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        50,
+        25,
+        25,
+        25,
+        50
+      ]
+    },
+    {
+      "name": "Hit_Down_Side",
+      "row": 1,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        50,
+        25,
+        25,
+        25,
+        50
+      ]
+    },
+    {
+      "name": "Hit_Side",
+      "row": 2,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        50,
+        25,
+        25,
+        25,
+        50
+      ]
+    },
+    {
+      "name": "Hit_Up_Side",
+      "row": 3,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        50,
+        25,
+        25,
+        25,
+        50
+      ]
+    },
+    {
+      "name": "Hit_Up",
+      "row": 4,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        50,
+        25,
+        25,
+        25,
+        50
+      ]
+    },
+    {
+      "name": "Rotate",
+      "row": 5,
+      "cols": 8,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Idle_Down",
+      "row": 6,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Idle_Down_Side",
+      "row": 7,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Idle_Side",
+      "row": 8,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Idle_Up_Side",
+      "row": 9,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Idle_Up",
+      "row": 10,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Walk_Down",
+      "row": 11,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Walk_Down_Side",
+      "row": 12,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Walk_Side",
+      "row": 13,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Walk_Up_Side",
+      "row": 14,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Walk_Up",
+      "row": 15,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Run_Down",
+      "row": 16,
+      "cols": 6,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Run_Down_Side",
+      "row": 17,
+      "cols": 6,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Run_Side",
+      "row": 18,
+      "cols": 6,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Run_Up_Side",
+      "row": 19,
+      "cols": 6,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Run_Up",
+      "row": 20,
+      "cols": 6,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Interact_Down",
+      "row": 21,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Interact_Down_Side",
+      "row": 22,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Interact_Side",
+      "row": 23,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Interact_Up_Side",
+      "row": 24,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Interact_Up",
+      "row": 25,
+      "cols": 4,
+      "durations": [
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Jump_Down",
+      "row": 26,
+      "cols": 5,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Jump_Down_Side",
+      "row": 27,
+      "cols": 5,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Jump_Side",
+      "row": 28,
+      "cols": 5,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Jump_Up_Side",
+      "row": 29,
+      "cols": 5,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Jump_Up",
+      "row": 30,
+      "cols": 5,
+      "durations": [
+        100,
+        100,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Punch_Down",
+      "row": 31,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        200,
+        50,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Punch_Down_Side",
+      "row": 32,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        200,
+        50,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Punch_Side",
+      "row": 33,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        200,
+        50,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Punch_Up_Side",
+      "row": 34,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        200,
+        50,
+        100,
+        100,
+        100
+      ]
+    },
+    {
+      "name": "Punch_Up",
+      "row": 35,
+      "cols": 7,
+      "durations": [
+        100,
+        100,
+        200,
+        50,
+        100,
+        100,
+        100
+      ]
+    }
+  ]
+}
