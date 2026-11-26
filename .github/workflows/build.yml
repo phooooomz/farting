@@ -11,6 +11,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Host unit tests (portable core)
+        run: sh tests/run_tests.sh
+
       - name: Build with PSP SDK (pspdev)
         run: docker run --rm -v "$PWD":/src -w /src pspdev/pspdev:latest make
 

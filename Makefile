@@ -2,18 +2,18 @@
 # Build with the PSP SDK (pspdev). Output: EBOOT.PBP
 
 TARGET = eclipse
-SRCS = $(wildcard src/*.c)
+SRCS = $(wildcard src/*.c) $(wildcard src/core/*.c)
 OBJS = $(SRCS:.c=.o)
 
 INCDIR = src
-CFLAGS = -O2 -G0 -Wall -Wextra -Wno-unused-parameter -std=gnu99
+CFLAGS = -O2 -G0 -Wall -Wextra -Wno-unused-parameter -std=gnu99 -Isrc -Isrc/core
 CXXFLAGS = $(CFLAGS)
 ASFLAGS = $(CFLAGS)
 
 PSP_EBOOT_TITLE = ECLIPSE: Little Wonders of Aetheria
 PSP_FW_VERSION = 371
 
-LIBS = -lpspdisplay -lpspctrl -lpspkernel -lm
+LIBS = -lpspgu -lpspgum -lpspdisplay -lpspctrl -lpspkernel -lm
 
 EXTRA_TARGETS = EBOOT.PBP
 

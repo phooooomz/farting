@@ -1,50 +1,74 @@
 /*
  * ECLIPSE: Little Wonders of Aetheria
- * Phase 2: main menu, settings (language switch), Thai text rendering.
+ * Phase 3-15: title menu, 3D world (GU), combat, quests, crafting, pets, save/load.
  */
 #include <pspkernel.h>
 #include "system.h"
-#include "video.h"
+#include "gfx.h"
 #include "input.h"
-#include "font.h"
 #include "locale.h"
 #include "menu.h"
+#include "game.h"
+#include "gamestate.h"
+#include "savefile.h"
 
-PSP_MODULE_INFO("ECLIPSE", PSP_MODULE_USER, 0, 2);
+PSP_MODULE_INFO("ECLIPSE", PSP_MODULE_USER, 0, 3);
 PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_USER);
 PSP_HEAP_SIZE_KB(-1024);
 
-typedef enum { STATE_MENU, STATE_COMING_SOON } GameState;
+typedef enum { ST_TITLE, ST_GAME } AppState;
+
+static GameState gs;
+
+static int load_first_slot(void)
+{
+    for (int i = 0; i < SAVE_SLOTS; i++) {
+        if (savefile_read(i, &gs)) return 1;
+    }
+    return 0;
+}
 
 int main(void)
 {
     system_init();
-    video_init();
     input_init();
-    loc_set(LANG_TH);       /* default language: Thai */
+    gfx_init();
+    loc_set(LANG_TH);
     menu_init();
 
-    GameState state = STATE_MENU;
+    AppState state = ST_TITLE;
+    int paused = 0;
     InputState in;
 
     for (;;) {
         input_update(&in);
 
-        if (state == STATE_MENU) {
+        if (state == ST_TITLE) {
             MenuAction act = menu_update(&in);
             if (act == MENU_ACT_EXIT) break;
-            if (act == MENU_ACT_START) state = STATE_COMING_SOON;
+            if (act == MENU_ACT_START) {
+                game_new(&gs);
+                game_begin(&gs);
+                game_menu_reset();
+                paused = 0;
+                state = ST_GAME;
+            } else if (act == MENU_ACT_LOAD) {
+                if (load_first_slot()) { game_begin(&gs); game_menu_reset(); paused = 0; state = ST_GAME; }
+            }
             menu_draw();
-        } else {
-            if (in.pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) state = STATE_MENU;
-            video_fill(RGBA(0xE8, 0xF4, 0xFF, 0xFF));
-            int w = font_width(loc_str(MSG_COMING_SOON));
-            font_draw((SCREEN_W - w) / 2, SCREEN_H / 2, loc_str(MSG_COMING_SOON), RGBA(0x4A, 0x3B, 0x5C, 0xFF));
+            continue;
         }
 
-        video_flip();
-        video_wait_vblank();
-        video_wait_vblank();   /* 30 FPS */
+        /* ST_GAME */
+        if (in.pressed & PSP_CTRL_START) paused = !paused;
+        if (!paused && game_menu_wanted()) paused = 1;
+        if (paused) game_menu_update(&gs, &in);
+        else        game_update(&gs, &in);
+
+        gfx_begin_frame(game_sky_color(&gs));
+        game_draw(&gs);
+        if (paused) game_menu_draw(&gs);
+        gfx_end_frame();
     }
 
     sceKernelExitGame();

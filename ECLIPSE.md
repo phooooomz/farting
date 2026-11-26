@@ -1,71 +1,72 @@
 # ECLIPSE: Little Wonders of Aetheria
 
-PSP Homebrew (Open World Action RPG) — Phase 1: build pipeline and basic loop.
+PSP Homebrew action RPG. Renders with GU (3D world), Thai text via a generated bitmap atlas.
 
-## Project structure
+## Layout
 
 ```
-eclipse-aetheria/
-├── Makefile                  # PSP SDK build (produces EBOOT.PBP)
-├── README.md
-├── src/
-│   ├── main.c                # Entry point, main loop, 30 FPS cap
-│   ├── system.c/.h           # Exit callback (HOME button), kernel thread
-│   ├── video.c/.h            # 480x272 framebuffer, double buffering, fill/rect
-│   └── input.c/.h            # Controller state (buttons, pressed, analog)
-└── data/
-    └── localization/
-        ├── th/               # Thai strings (Phase 2+, empty for now)
-        └── en/               # English strings (Phase 2+, empty for now)
+Makefile                 PSP build -> EBOOT.PBP (compiles src/*.c and src/core/*.c)
+src/
+  main.c                 title -> game flow, pause toggle (START)
+  system.c               exit callback
+  input.c                pad state (pressed edges)
+  gfx.c                  GU setup, 3D boxes/ground, 2D rects, textured glyph text
+  font.c                 UTF-8 decode, Thai mark placement, glyph lookup
+  font_data.c            generated atlas (tools/gen_font.py, Sarabun OFL)
+  locale.c               Localization IDs, Thai (default) and English
+  menu.c                 title menu, settings (language)
+  game.c                 world sim (movement, mobs, AI, quests, gather, pets), 3D draw, pause tabs
+  savefile.c             3 save slots on ms0:/PSP/SAVEDATA/ECLIPSE
+src/core/                portable logic (no PSP headers): stats, items, crafting, quests,
+                         combat, world, pets, save format, RNG
+tests/test_core.c        host unit tests for src/core
+tests/run_tests.sh       build + run host tests (gcc only)
+tools/gen_font.py        regenerate font_data.c
+assets/font/             Sarabun-Regular.ttf + OFL.txt
 ```
 
-## Toolchain
-
-- **PSP SDK (pspdev)**: provides `psp-gcc`, `psp-config`, `mksfoex`, `pack-pbp`
-- Easiest route: the `pspdev/pspdev` Docker image
-- Emulator for testing: **PPSSPP** (Settings → System → Enable PSP Homebrew / Emulation)
-
-## Build
-
-With Docker:
-
-```sh
-docker run --rm -v "$PWD":/src -w /src pspdev/pspdev:latest make
-```
-
-With a local pspdev install (`PSPDEV` set, `psp-config` on PATH):
-
-```sh
-make
-```
-
-Output: `EBOOT.PBP`
-
-## Run in PPSSPP
-
-1. Create the folder `PSP/GAME/ECLIPSE/` in PPSSPP's memory stick (`ms0`).
-2. Copy `EBOOT.PBP` into it.
-3. Open the game from PPSSPP's homebrew list.
-
-## Phase 1 controls
+## Controls
 
 | Input | Action |
 |---|---|
-| D-pad / Analog stick | Move the test marker |
-| START | Exit |
+| Analog | move (camera-relative) |
+| D-pad left/right | rotate camera |
+| D-pad up/down | zoom |
+| X | attack nearby monster, talk to NPC, buy potion, open crafting table, gather node |
+| O | jump |
+| Triangle | dodge (short invulnerability, uses stamina) |
+| Square | magic skill (Bubble Blast, uses MP) |
+| R (held) | run (uses stamina) |
+| SELECT | mount (current pet with mount ability and friendship >= 300) |
+| START | pause menu (L/R switch tab, X and D-pad act on current tab) |
+
+## Build and test
+
+- Host tests (no PSP SDK): `sh tests/run_tests.sh`
+- PSP build: GitHub Actions builds `EBOOT.PBP` on every push (download the `EBOOT` artifact)
 
 ## Status
 
-- [x] Project structure and Makefile
-- [x] Display init (480x272, 8888, double buffered)
-- [x] Controller input
-- [x] Main loop with 30 FPS cap
-- [x] Build verified with pspdev (GitHub Actions artifact)
-- [x] Tested in PPSSPP (boots, shows test marker)
-- [x] Thai font rendering: Sarabun (OFL 1.1), generated atlas via tools/gen_font.py
-- [x] Main menu, settings (language switch), Localization IDs (Thai default, English)
-- [ ] Phases 3-15 (not started)
+Done:
+- Build pipeline, GU rendering, input, 30 FPS loop
+- Thai text rendering (Sarabun atlas, combining marks centered on base), English fallback
+- Title menu, settings (language switch), pause menu with 6 tabs
+- Stats, levels (1-100), stat points, skill points
+- Items, inventory (stack, split, sort, use, equip), 7 equipment slots
+- Crafting table recipes, materials and gold cost
+- Quests: story chain, gather, hunt, dungeon trigger; rewards; pets granted by quests
+- Monsters with idle/wander/chase/attack/return/death, respawn timers, drops
+- Boss (Pudding King) with 3 HP phases, appears while quest 6 is active
+- Resource nodes with respawn; pets follow, feed (treats), mount speed-up
+- 3 save slots (checksum-verified binary format)
+- Region 0 (Bloomvale) and region 1 (Whispering Woods) with gated portal
 
-Phase 2 status: menu and Thai text are in place. Continue, Load, and Start (game screen) are placeholders; the game world is not built yet.
-
-Fonts: `assets/font/Sarabun-Regular.ttf` and `OFL.txt` (SIL Open Font License 1.1). Regenerate with `python3 tools/gen_font.py assets/font/Sarabun-Regular.ttf 16 src/font_data.c`.
+Not done (placeholders or missing):
+- Regions 2-5 (Snowberry Valley, Coral Coast, Crystal Caverns, Starcloud Kingdom): content and travel missing
+- Dungeon floors (only the cave trigger), Forest Cave is a single box
+- Models: all characters, monsters and props are colored boxes, not chibi/low-poly models
+- Animations, sound, sky/weather (rain, snow, fog), fishing, farming, mining animation
+- Skill tree, enchanting/upgrade/repair, shop selling, storage, NPC schedules, fast travel, minimap
+- Status effects, weak points, dodge-based combat balance
+- Localization: most UI strings are localized; item/monster/quest names are stored per language inside their tables
+- Not run on PPSSPP yet (only host tests of core logic have been executed)
