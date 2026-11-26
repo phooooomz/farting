@@ -60,8 +60,8 @@ Output: `EBOOT.PBP`
 - [x] Display init (480x272, 8888, double buffered)
 - [x] Controller input
 - [x] Main loop with 30 FPS cap
-- [ ] Build verified with pspdev (not yet run in this environment)
-- [ ] Tested in PPSSPP (not yet run)
+- [x] Build verified with pspdev (GitHub Actions artifact)
+- [x] Tested in PPSSPP (boots, shows test marker)
 - [ ] Thai font rendering (Phase 2+)
 - [ ] Localization system (Phase 2+)
 
