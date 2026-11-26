@@ -20,7 +20,7 @@ fi
 export LIBGL_ALWAYS_SOFTWARE=1
 # Run for 25s. timeout exit 124 = still running after 25s (no crash).
 xvfb-run -a -s "-screen 0 1280x800x24" sh -c "
-  '$PPSSPP_BIN' '$EBOOT' > '$OUT/ppsspp.log' 2>&1 &
+  $PPSSPP_BIN '$EBOOT' > '$OUT/ppsspp.log' 2>&1 &
   PID=\$!
   sleep 20
   import -window root '$OUT/screen.png' 2>/dev/null || true
