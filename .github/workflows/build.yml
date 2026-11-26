@@ -38,10 +38,13 @@ jobs:
           name: EBOOT
           path: out
 
-      - name: Install PPSSPP and virtual display
+      - name: Install PPSSPP (Flathub) and virtual display
         run: |
           sudo apt-get update
-          sudo apt-get install -y ppsspp xvfb imagemagick mesa-utils || sudo apt-get install -y xvfb imagemagick mesa-utils
+          sudo apt-get install -y flatpak xvfb imagemagick mesa-utils
+          sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          sudo flatpak install -y --noninteractive flathub org.ppsspp.PPSSPP
+          sudo flatpak override --filesystem=host org.ppsspp.PPSSPP
 
       - name: Run EBOOT in PPSSPP
         run: sh tests/ppsspp_smoke.sh out/EBOOT.PBP smoke_out

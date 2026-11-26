@@ -7,11 +7,11 @@ OUT="$2"
 mkdir -p "$OUT"
 
 PPSSPP_BIN=""
-for c in PPSSPPSDL ppsspp PPSSPP; do
+for c in PPSSPPSDL ppsspp; do
   if command -v "$c" >/dev/null 2>&1; then PPSSPP_BIN="$c"; break; fi
 done
-if [ -z "$PPSSPP_BIN" ]; then
-  PPSSPP_BIN="$(dpkg -L ppsspp 2>/dev/null | grep -E '/(PPSSPPSDL|ppsspp)$' | head -1)"
+if [ -z "$PPSSPP_BIN" ] && flatpak info org.ppsspp.PPSSPP >/dev/null 2>&1; then
+  PPSSPP_BIN="flatpak run org.ppsspp.PPSSPP"
 fi
 if [ -z "$PPSSPP_BIN" ]; then
   echo "PPSSPP not found" | tee "$OUT/result.txt"; exit 2
