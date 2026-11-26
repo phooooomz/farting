@@ -23,3 +23,33 @@ jobs:
           name: EBOOT
           path: EBOOT.PBP
           if-no-files-found: error
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download EBOOT
+        uses: actions/download-artifact@v4
+        with:
+          name: EBOOT
+          path: out
+
+      - name: Install PPSSPP and virtual display
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ppsspp xvfb imagemagick mesa-utils || sudo apt-get install -y xvfb imagemagick mesa-utils
+
+      - name: Run EBOOT in PPSSPP
+        run: sh tests/ppsspp_smoke.sh out/EBOOT.PBP smoke_out
+
+      - name: Upload screenshot and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-screenshot
+          path: smoke_out
+          if-no-files-found: warn
