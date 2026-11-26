@@ -62,7 +62,10 @@ Output: `EBOOT.PBP`
 - [x] Main loop with 30 FPS cap
 - [x] Build verified with pspdev (GitHub Actions artifact)
 - [x] Tested in PPSSPP (boots, shows test marker)
-- [ ] Thai font rendering (Phase 2+)
-- [ ] Localization system (Phase 2+)
+- [x] Thai font rendering: Sarabun (OFL 1.1), generated atlas via tools/gen_font.py
+- [x] Main menu, settings (language switch), Localization IDs (Thai default, English)
+- [ ] Phases 3-15 (not started)
 
-The orange-pink square on screen is a **test marker**, not game content.
+Phase 2 status: menu and Thai text are in place. Continue, Load, and Start (game screen) are placeholders; the game world is not built yet.
+
+Fonts: `assets/font/Sarabun-Regular.ttf` and `OFL.txt` (SIL Open Font License 1.1). Regenerate with `python3 tools/gen_font.py assets/font/Sarabun-Regular.ttf 16 src/font_data.c`.

@@ -1,73 +1,50 @@
 /*
  * ECLIPSE: Little Wonders of Aetheria
- * Phase 1: build pipeline + basic loop
- *
- * This file only verifies that:
- *   - the EBOOT builds
- *   - the display initialises at 480x272
- *   - the controller works (D-pad / analog move the marker)
- *   - START exits the game
- *   - the loop is capped at ~30 FPS
- *
- * The marker below is a TEST MARKER, not game content.
+ * Phase 2: main menu, settings (language switch), Thai text rendering.
  */
 #include <pspkernel.h>
 #include "system.h"
 #include "video.h"
 #include "input.h"
+#include "font.h"
+#include "locale.h"
+#include "menu.h"
 
-PSP_MODULE_INFO("ECLIPSE", PSP_MODULE_USER, 0, 1);
+PSP_MODULE_INFO("ECLIPSE", PSP_MODULE_USER, 0, 2);
 PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_USER);
 PSP_HEAP_SIZE_KB(-1024);
 
-#define COLOR_SKY     RGBA(0xBF, 0xE6, 0xFF, 0xFF)
-#define COLOR_MARKER  RGBA(0xFF, 0xB3, 0xD9, 0xFF)
-
-#define MARKER_SIZE   24
-#define MOVE_SPEED    2
+typedef enum { STATE_MENU, STATE_COMING_SOON } GameState;
 
 int main(void)
 {
     system_init();
     video_init();
     input_init();
+    loc_set(LANG_TH);       /* default language: Thai */
+    menu_init();
 
-    int mx = (SCREEN_W - MARKER_SIZE) / 2;
-    int my = (SCREEN_H - MARKER_SIZE) / 2;
-
+    GameState state = STATE_MENU;
     InputState in;
 
     for (;;) {
         input_update(&in);
 
-        if (in.pressed & PSP_CTRL_START) {
-            break;
+        if (state == STATE_MENU) {
+            MenuAction act = menu_update(&in);
+            if (act == MENU_ACT_EXIT) break;
+            if (act == MENU_ACT_START) state = STATE_COMING_SOON;
+            menu_draw();
+        } else {
+            if (in.pressed & (PSP_CTRL_CIRCLE | PSP_CTRL_START)) state = STATE_MENU;
+            video_fill(RGBA(0xE8, 0xF4, 0xFF, 0xFF));
+            int w = font_width(loc_str(MSG_COMING_SOON));
+            font_draw((SCREEN_W - w) / 2, SCREEN_H / 2, loc_str(MSG_COMING_SOON), RGBA(0x4A, 0x3B, 0x5C, 0xFF));
         }
 
-        /* D-pad */
-        if (in.buttons & PSP_CTRL_LEFT)  mx -= MOVE_SPEED;
-        if (in.buttons & PSP_CTRL_RIGHT) mx += MOVE_SPEED;
-        if (in.buttons & PSP_CTRL_UP)    my -= MOVE_SPEED;
-        if (in.buttons & PSP_CTRL_DOWN)  my += MOVE_SPEED;
-
-        /* Analog stick (dead zone around the center) */
-        int dx = (in.lx - 128) / 32;
-        int dy = (in.ly - 128) / 32;
-        mx += dx;
-        my += dy;
-
-        if (mx < 0) mx = 0;
-        if (my < 0) my = 0;
-        if (mx > SCREEN_W - MARKER_SIZE) mx = SCREEN_W - MARKER_SIZE;
-        if (my > SCREEN_H - MARKER_SIZE) my = SCREEN_H - MARKER_SIZE;
-
-        video_fill(COLOR_SKY);
-        video_fill_rect(mx, my, MARKER_SIZE, MARKER_SIZE, COLOR_MARKER);
         video_flip();
-
-        /* 60 Hz display -> two vblanks per frame = 30 FPS target */
         video_wait_vblank();
-        video_wait_vblank();
+        video_wait_vblank();   /* 30 FPS */
     }
 
     sceKernelExitGame();

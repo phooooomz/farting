@@ -2,7 +2,8 @@
 # Build with the PSP SDK (pspdev). Output: EBOOT.PBP
 
 TARGET = eclipse
-OBJS = src/main.o src/system.o src/video.o src/input.o
+SRCS = $(wildcard src/*.c)
+OBJS = $(SRCS:.c=.o)
 
 INCDIR = src
 CFLAGS = -O2 -G0 -Wall -Wextra -Wno-unused-parameter -std=gnu99

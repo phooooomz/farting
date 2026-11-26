@@ -58,3 +58,15 @@ void video_wait_vblank(void)
 {
     sceDisplayWaitVblankStart();
 }
+
+void video_blend_pixel(int x, int y, uint32_t color, uint8_t alpha)
+{
+    if (x < 0 || y < 0 || x >= SCREEN_W || y >= SCREEN_H) return;
+    uint32_t *p = &buffers[back_index][y * LINE_W + x];
+    uint32_t d = *p;
+    uint32_t a = alpha, ia = 255 - a;
+    uint32_t r = ((color & 0xFF) * a + (d & 0xFF) * ia) / 255;
+    uint32_t g = (((color >> 8) & 0xFF) * a + ((d >> 8) & 0xFF) * ia) / 255;
+    uint32_t b = (((color >> 16) & 0xFF) * a + ((d >> 16) & 0xFF) * ia) / 255;
+    *p = RGBA(r, g, b, 0xFF);
+}

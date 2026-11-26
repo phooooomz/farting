@@ -15,5 +15,6 @@ void video_fill(uint32_t color);
 void video_fill_rect(int x, int y, int w, int h, uint32_t color);
 void video_flip(void);          /* present the back buffer and swap buffers */
 void video_wait_vblank(void);
+void video_blend_pixel(int x, int y, uint32_t color, uint8_t alpha);
 
 #endif
