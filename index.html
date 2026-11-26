@@ -13,9 +13,6 @@ canvas {
   width: min(100vw, 133vh); height: auto; aspect-ratio: 4 / 3;
   background: #000; display: block;
 }
-#hud { position: fixed; top: 8px; left: 10px; font-size: 13px; text-shadow: 1px 1px #000; pointer-events: none; }
-#msg { position: fixed; top: 38px; left: 50%; transform: translateX(-50%); font-size: 15px; text-shadow: 1px 1px #000; pointer-events: none; transition: opacity .4s; opacity: 0; white-space: nowrap; }
-
 #joy {
   position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px;
   border-radius: 50%; background: rgba(255,255,255,0.12);
@@ -27,79 +24,100 @@ canvas {
   margin: -25px 0 0 -25px; border-radius: 50%;
   background: rgba(255,255,255,0.45); pointer-events: none;
 }
-
-#btns { position: fixed; right: 20px; bottom: 20px; display: grid; grid-template-columns: repeat(2, 70px); gap: 12px; }
+#btns { position: fixed; right: 20px; bottom: 20px; display: flex; gap: 12px; }
 .btn {
   width: 70px; height: 70px; border-radius: 50%;
   border: 2px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.15);
-  color: #fff; font-size: 12px; font-weight: bold; line-height: 1.2;
+  color: #fff; font-size: 13px; font-weight: bold;
   touch-action: none; user-select: none; -webkit-user-select: none;
 }
 .btn:active { background: rgba(255,255,255,0.35); }
-
-#bag {
-  position: fixed; inset: 0; margin: auto; width: 280px; height: max-content; max-height: 80%;
-  overflow: auto; box-sizing: border-box; padding: 14px; display: none;
-  background: rgba(15,20,28,0.96); border: 2px solid #444; border-radius: 10px;
-}
-#bag h3 { margin: 0 0 8px; }
-#bag .row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; font-size: 14px; }
-#bag button { background: #2f6fd6; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
-#bag button:disabled { background: #444; color: #888; }
-#bag hr { border: 0; border-top: 1px solid #333; margin: 10px 0; }
-#bagClose { margin-top: 10px; width: 100%; background: #555 !important; }
+#err { position: fixed; top: 8px; left: 8px; color: #f66; font-size: 13px; }
 </style>
 </head>
 <body>
-<canvas id="c" width="256" height="192"></canvas>
-<div id="hud"></div>
-<div id="msg"></div>
+<canvas id="c" width="384" height="288"></canvas>
+
 <div id="joy"><div id="knob"></div></div>
 <div id="btns">
+  <button class="btn" id="bPunch">ต่อย<br>J</button>
   <button class="btn" id="bJump">กระโดด<br>Space</button>
-  <button class="btn" id="bAtk">ตี<br>J</button>
-  <button class="btn" id="bFish">ตกปลา<br>F</button>
-  <button class="btn" id="bBag">กระเป๋า<br>I</button>
-</div>
-<div id="bag">
-  <h3>🎒 กระเป๋า</h3>
-  <div id="bagBody"></div>
-  <button id="bagClose">ปิด</button>
 </div>
 
 <script>
+// =====================================================
+// ค่าคงที่
+// =====================================================
+const W = 384, H = 288;
+const T = 16;                         // ขนาดช่องแผนที่ 16 px
+const MAP_W = 40, MAP_H = 30;         // ขนาดแผนที่ทดสอบ (ช่อง)
+const TS_COLS = 64;                   // tileset 1024 px / 16 px
+const TS_FILE = 'assets/map/spr_tileset_sunnysideworld_16px.png';
 
-// ---------- sprite จาก Aseprite (player.png + player.json) ----------
+const CELL = 48;                      // ขนาดช่องใน player.png (ตัวละครเดิม)
+const SPRITE_SCALE = 1;
+const WALK_SPEED = 2, RUN_SPEED = 3.5, JUMP_POWER = 3.2, JOY_RUN_AT = 0.9;
 const SPR_DIR = 'assets/sprites/';
-const CELL = 48;                              // ขนาดช่องใน sheet
-const sheetImg = new Image();
-sheetImg.src = SPR_DIR + 'player.png';
-let TAG = {};                                 // ชื่อ tag -> {row, cols, durations}
-let spritesReady = false;
 
-fetch(SPR_DIR + 'player.json')
-  .then(r => r.json())
-  .then(meta => {
-    TAG = Object.fromEntries(meta.tags.map(t => [t.name, t]));
-    spritesReady = true;
-  })
-  .catch(() => console.warn('โหลด player.json ไม่ได้'));
-
-// =====================================================
-// พื้นฐานเกม
-// =====================================================
 const cv = document.getElementById('c'), g = cv.getContext('2d');
 g.imageSmoothingEnabled = false;
-const W = 256, H = 192, T = 16;
-const SEED = Math.random() * 1e9 | 0;
-const hud = document.getElementById('hud');
-const msgEl = document.getElementById('msg');
-const bagEl = document.getElementById('bag');
-const bagBody = document.getElementById('bagBody');
 
-// ---------- noise / โลก ----------
-function hash(x, y, s = 0) {
-  let h = (x * 374761393 + y * 668265263 + s * 982451653 + SEED) | 0;
+// =====================================================
+// โหลดไฟล์
+// =====================================================
+function loadImg(src) {
+  return new Promise((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error('โหลดรูปไม่ได้: ' + src));
+    i.src = encodeURI(src);
+  });
+}
+async function fetchJson(path) {
+  const r = await fetch(encodeURI(path));
+  if (!r.ok) throw new Error('โหลดไม่ได้: ' + path);
+  return r.json();
+}
+
+const assets = { sheet: null, tiles: null };
+let TAG = {};
+
+// =====================================================
+// แยกประเภทช่องจากภาพ tileset (หญ้า / น้ำ / ทราย)
+// ใช้สีเฉลี่ยของแต่ละช่อง จึงไม่ต้องรู้พิกัดล่วงหน้า
+// =====================================================
+function classifyTiles(img) {
+  const cv2 = document.createElement('canvas');
+  cv2.width = img.width; cv2.height = img.height;
+  const c2 = cv2.getContext('2d');
+  c2.drawImage(img, 0, 0);
+  const data = c2.getImageData(0, 0, img.width, img.height).data;
+  const cls = { grass: [], water: [], sand: [] };
+  const rows = img.height / T, cols = img.width / T;
+  for (let ty = 0; ty < rows; ty++)
+    for (let tx = 0; tx < cols; tx++) {
+      let r = 0, gg = 0, b = 0, opaque = true;
+      for (let y = 0; y < T; y++)
+        for (let x = 0; x < T; x++) {
+          const i = ((ty * T + y) * img.width + tx * T + x) * 4;
+          if (data[i + 3] < 255) opaque = false;
+          r += data[i]; gg += data[i + 1]; b += data[i + 2];
+        }
+      if (!opaque) continue;
+      const n = T * T; r /= n; gg /= n; b /= n;
+      const id = ty * cols + tx;
+      if (gg > r + 25 && gg > b + 25) cls.grass.push(id);
+      else if (b > r + 50 && b > gg + 15) cls.water.push(id);
+      else if (r > 190 && gg > 170 && b < 150) cls.sand.push(id);
+    }
+  return cls;
+}
+
+// =====================================================
+// สร้างแผนที่ทดสอบ
+// =====================================================
+function hash(x, y, s) {
+  let h = (x * 374761393 + y * 668265263 + s * 982451653) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
@@ -109,286 +127,134 @@ function vnoise(x, y, s) {
   const a = hash(xi, yi, s), b = hash(xi + 1, yi, s), c = hash(xi, yi + 1, s), d = hash(xi + 1, yi + 1, s);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
-function fbm(x, y, s) {
-  return vnoise(x / 24, y / 24, s) * 0.6 + vnoise(x / 10, y / 10, s + 7) * 0.3 + vnoise(x / 5, y / 5, s + 13) * 0.1;
-}
 
-const T_WATER = 0, T_SAND = 1, T_GRASS = 2, T_FOREST = 3, T_STONE = 4, T_SNOW = 5, T_ORE = 6;
-const SOLID = new Set([T_WATER, T_FOREST, T_STONE, T_ORE]);
-const COL = {
-  [T_WATER]: ['#2b6cb0', '#3d8bd9'], [T_SAND]: ['#e2c275', '#d4b06a'],
-  [T_GRASS]: ['#4a8f3a', '#5ca548'], [T_FOREST]: ['#2d6a2b', '#24571f'],
-  [T_STONE]: ['#7a7d86', '#8f939c'], [T_SNOW]: ['#eef3f7', '#d3dee8'],
-  [T_ORE]:   ['#7a7d86', '#8f939c'],
-};
+const MAP = { w: MAP_W, h: MAP_H, ground: [], solid: [] };
 
-function baseTile(tx, ty) {
-  const e = fbm(tx, ty, 1);
-  if (e < 0.36) return T_WATER;
-  if (e < 0.41) return T_SAND;
-  if (e > 0.72) return e > 0.8 ? T_SNOW : (hash(tx, ty, 60) > 0.75 ? T_ORE : T_STONE);
-  if (fbm(tx, ty, 5) > 0.56 && hash(tx, ty, 9) > 0.35) return T_FOREST;
-  return T_GRASS;
-}
-const cleared = new Map();   // key -> เวลาที่ถูกตัด/ขุด
-const nodeHp = new Map();    // key -> HP ที่เหลือของต้นไม้/หิน/แร่
-function kindAt(tx, ty) {
-  const k = baseTile(tx, ty);
-  if ((k === T_FOREST || k === T_STONE || k === T_ORE) && cleared.has(tx + ',' + ty)) return T_GRASS;
-  return k;
-}
-
-function drawTile(tx, ty, sx, sy, t) {
-  const k = kindAt(tx, ty);
-  const [c1, c2] = COL[k];
-  g.fillStyle = c1; g.fillRect(sx, sy, T, T);
-  g.fillStyle = c2;
-  for (let i = 0; i < 4; i++) {
-    const px = ((hash(tx * 4 + i, ty, 40) * 14) | 0) + 1;
-    const py = ((hash(tx, ty * 4 + i, 41) * 14) | 0) + 1;
-    if (k === T_WATER) {
-      if (((px + py + (t / 300 | 0)) & 3) === 0) g.fillRect(sx + px, sy + py, 3, 1);
-    } else {
-      g.fillRect(sx + px, sy + py, 2, 2);
+function buildMap(cls) {
+  const pick = (arr, x, y, s) => arr[Math.floor(hash(x, y, s) * arr.length)];
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++) {
+      const n = vnoise(x / 6, y / 6, 3) * 0.7 + vnoise(x / 2.5, y / 2.5, 9) * 0.3;
+      const border = x < 1 || y < 1 || x >= MAP_W - 1 || y >= MAP_H - 1;
+      let kind = 'grass';
+      if (border || n < 0.32) kind = 'water';
+      else if (n < 0.37) kind = 'sand';
+      const list = cls[kind].length ? cls[kind] : cls.grass;
+      const i = y * MAP_W + x;
+      MAP.ground[i] = pick(list, x, y, 1);
+      MAP.solid[i] = kind === 'water' || border;
     }
-  }
-  if (k === T_FOREST) {
-    g.fillStyle = '#5a3a1e'; g.fillRect(sx + 6, sy + 10, 4, 6);
-    g.fillStyle = '#1f4d1c'; g.fillRect(sx + 2, sy + 2, 12, 9);
-    g.fillStyle = '#3a8a34'; g.fillRect(sx + 4, sy + 3, 4, 3);
-  }
-  if (k === T_ORE) {
-    g.fillStyle = '#e89a3c'; g.fillRect(sx + 4, sy + 5, 2, 2); g.fillRect(sx + 10, sy + 10, 2, 2);
-  }
-  if (k === T_GRASS && hash(tx, ty, 30) > 0.9) {
-    g.fillStyle = '#f5e663'; g.fillRect(sx + 7, sy + 7, 2, 2);
-    g.fillStyle = '#e8533a'; g.fillRect(sx + 3, sy + 11, 2, 2);
-  }
 }
 
-// ---------- sprite ผู้เล่น ----------
-function drawPix(rows, pal, x, y) {
-  rows.forEach((row, r) => [...row].forEach((c, i) => {
-    if (pal[c]) { g.fillStyle = pal[c]; g.fillRect(x + i, y + r, 1, 1); }
-  }));
-}
-const FALLBACK_ROWS = [
-  '..HHHH..', '.HHHHHH.', '.HSSSSH.', '.SKSSKS.', '.SSSSSS.',
-  '..SSSS..', '.BBBBBB.', 'BBBBBBBB', 'BBBBBBBB', '..PP.PP.',
-];
-const FALLBACK_PAL = { H: '#6b3a1a', S: '#f1c27d', K: '#111', B: '#2f6fd6', P: '#2b2b3a' };
-const SLIME_ROWS = [
-  '..GGGG..', '.GGGGGG.', 'GGKGGKGG', 'GGGGGGGG', 'GGGGGGGG', '.GGGGGG.', 'G......G',
-];
-const SLIME_PAL = { G: '#5fd35f', K: '#111' };
-
-// ---------- สถานะผู้เล่น ----------
-const P = { hp: 100, maxHp: 100, atk: 10, lv: 1, exp: 0, maxExp: 50 };
-const inv = { wood: 0, stone: 0, iron: 0, fish: 0 };
-let px = 0, py = 0, dir = 'd', step = 0, moving = false, running = false;
-let z = 0, vz = 0;
-let atkCD = 0;
-let fishT = -1;
-let spawnX = 0, spawnY = 0;
-let bagOpen = false;
-const DIRV = { a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
-const DIR_NAME = { a: 'left', d: 'right', w: 'up', s: 'down' };
-
-function say(t) {
-  msgEl.textContent = t;
-  msgEl.style.opacity = 1;
-  clearTimeout(say.t);
-  say.t = setTimeout(() => msgEl.style.opacity = 0, 2500);
+function drawTileId(id, dx, dy) {
+  const sx = (id % TS_COLS) * T, sy = Math.floor(id / TS_COLS) * T;
+  g.drawImage(assets.tiles, sx, sy, T, T, dx, dy, T, T);
 }
 
-function gainExp(n) {
-  P.exp += n;
-  while (P.exp >= P.maxExp) {
-    P.exp -= P.maxExp;
-    P.lv++;
-    P.maxExp = Math.floor(P.maxExp * 1.5);
-    P.atk += 5;
-    P.maxHp += 20;
-    P.hp = P.maxHp;
-    say('🎉 เลเวลอัป! Lv.' + P.lv);
-  }
+function drawMap(camX, camY) {
+  const t0x = Math.floor(camX / T), t0y = Math.floor(camY / T);
+  for (let ty = t0y; ty <= t0y + H / T + 1; ty++)
+    for (let tx = t0x; tx <= t0x + W / T + 1; tx++) {
+      if (tx < 0 || ty < 0 || tx >= MAP.w || ty >= MAP.h) continue;
+      drawTileId(MAP.ground[ty * MAP.w + tx], tx * T - camX, ty * T - camY);
+    }
 }
 
-function hurt(n) {
-  P.hp -= n;
-  if (P.hp <= 0) {
-    say('💀 ตายแล้ว กลับจุดเกิด');
-    P.hp = P.maxHp;
-    px = spawnX; py = spawnY; z = 0; vz = 0;
-  }
+function isSolid(tx, ty) {
+  if (tx < 0 || ty < 0 || tx >= MAP.w || ty >= MAP.h) return true;
+  return MAP.solid[ty * MAP.w + tx];
 }
 
-// ---------- การชน ----------
 function blocked(x, y) {
   const x0 = Math.floor((x + 1) / T), x1 = Math.floor((x + 6) / T);
   const y0 = Math.floor((y + 6) / T), y1 = Math.floor((y + 9) / T);
   for (let ty = y0; ty <= y1; ty++)
     for (let tx = x0; tx <= x1; tx++)
-      if (SOLID.has(kindAt(tx, ty))) return true;
+      if (isSolid(tx, ty)) return true;
   return false;
 }
-function tryMove(o, dx, dy) {
-  const nx = o.x + dx; if (!blocked(nx, o.y)) o.x = nx;
-  const ny = o.y + dy; if (!blocked(o.x, ny)) o.y = ny;
-}
-function randomGrassNear(cx, cy, r) {
-  const bx = Math.floor(cx / T), by = Math.floor(cy / T);
-  for (let i = 0; i < 300; i++) {
-    const tx = bx + Math.floor(Math.random() * (r * 2 + 1)) - r;
-    const ty = by + Math.floor(Math.random() * (r * 2 + 1)) - r;
-    if (kindAt(tx, ty) === T_GRASS) return { x: tx * T, y: ty * T };
-  }
-  return { x: cx, y: cy };
-}
-function spawnPlayer() {
-  for (let r = 0; r < 400; r++)
+
+function spawnTile() {
+  const cx = Math.floor(MAP.w / 2), cy = Math.floor(MAP.h / 2);
+  for (let r = 0; r < 20; r++)
     for (let dy = -r; dy <= r; dy++)
       for (let dx = -r; dx <= r; dx++)
-        if (baseTile(dx, dy) === T_GRASS) { px = dx * T; py = dy * T; return; }
+        if (!isSolid(cx + dx, cy + dy)) return { x: (cx + dx) * T, y: (cy + dy) * T };
+  return { x: T, y: T };
 }
 
-// ---------- มอนสเตอร์ ----------
-const mobs = [];
-function makeMob() {
-  const p = randomGrassNear(spawnX, spawnY, 12);
-  return { x: p.x, y: p.y, hp: 20, maxHp: 20, wander: 0, vx: 0, vy: 0, cd: 0, respawnAt: 0 };
-}
-function updateMobs(now) {
-  for (const m of mobs) {
-    if (m.hp <= 0) {
-      if (now >= m.respawnAt) {
-        const p = randomGrassNear(spawnX, spawnY, 12);
-        m.x = p.x; m.y = p.y; m.hp = m.maxHp;
-      }
-      continue;
-    }
-    const dx = px - m.x, dy = py - m.y, d = Math.hypot(dx, dy);
-    if (d < 70 && d > 0.001) {
-      m.vx = dx / d * 0.6; m.vy = dy / d * 0.6;
-    } else if (--m.wander <= 0) {
-      m.wander = 60 + Math.random() * 60;
-      const a = Math.random() * Math.PI * 2;
-      m.vx = Math.cos(a) * 0.3; m.vy = Math.sin(a) * 0.3;
-    }
-    tryMove(m, m.vx, m.vy);
-    if (m.cd > 0) m.cd--;
-    if (d < 10 && m.cd <= 0) { hurt(5); m.cd = 60; say('😖 สไลม์โจมตี -5 HP'); }
-  }
-}
+// =====================================================
+// ผู้เล่น
+// =====================================================
+let px = 0, py = 0, dir = 'd', moving = false, running = false;
+let z = 0, vz = 0;
+let punchCD = 0;
+let override = null;
 
-// ---------- ตี / เก็บเกี่ยว ----------
-function attackPoint() {
-  const [fx, fy] = DIRV[dir];
-  return { ax: px + 4 + fx * 12, ay: py + 5 + fy * 12 };
+function movePlayer(dx, dy) {
+  if (!blocked(px + dx, py)) px += dx;
+  if (!blocked(px, py + dy)) py += dy;
 }
-function attack() {
-  if (atkCD > 0) return;
-  atkCD = 20;
-  const { ax, ay } = attackPoint();
-
-  for (const m of mobs) {
-    if (m.hp > 0 && Math.hypot(m.x + 4 - ax, m.y + 4 - ay) < 14) {
-      m.hp -= P.atk;
-      if (m.hp <= 0) {
-        m.respawnAt = Date.now() + 8000;
-        gainExp(10);
-        say('⚔️ ฆ่าสไลม์ได้ +10 EXP');
-      } else {
-        say('⚔️ ตีสไลม์ -' + P.atk);
-      }
-      return;
-    }
-  }
-
-  const tx = Math.floor(ax / T), ty = Math.floor(ay / T), key = tx + ',' + ty;
-  const k = kindAt(tx, ty);
-  if (k === T_FOREST || k === T_STONE || k === T_ORE) {
-    if (!nodeHp.has(key)) nodeHp.set(key, k === T_FOREST ? 30 : k === T_ORE ? 50 : 40);
-    const left = nodeHp.get(key) - P.atk;
-    if (left > 0) { nodeHp.set(key, left); return; }
-    nodeHp.delete(key);
-    cleared.set(key, Date.now());
-    if (k === T_FOREST)     { inv.wood++;  gainExp(10); say('🪓 ตัดไม้ได้ +1'); }
-    else if (k === T_STONE) { inv.stone++; gainExp(15); say('⛏️ ได้หิน +1'); }
-    else                    { inv.iron++;  gainExp(25); say('⛏️ ขุดแร่เหล็ก +1'); }
-    refreshBag();
-  }
-}
-
-// ---------- กระโดด / ตกปลา ----------
 function jump() { if (z === 0 && vz === 0) vz = JUMP_POWER; }
-function fish() {
-  const { ax, ay } = attackPoint();
-  if (kindAt(Math.floor(ax / T), Math.floor(ay / T)) !== T_WATER) { say('🎣 ต้องหันหน้าเข้าหาน้ำก่อน'); return; }
-  if (fishT >= 0) return;
-  fishT = Date.now() + 2000 + Math.random() * 2000;
-  say('🎣 กำลังตกปลา...');
+function punch() {
+  if (punchCD > 0) return;
+  punchCD = 20;
+  override = { name: 'Punch', until: Date.now() + 280 };
 }
 
-// ---------- คราฟ ----------
-const RECIPES = {
-  stone_sword:  { name: 'ดาบหิน',   need: { wood: 3, stone: 2 }, gain: 'ATK +15', run() { P.atk += 15; } },
-  iron_sword:   { name: 'ดาบเหล็ก', need: { iron: 3, wood: 2 },  gain: 'ATK +35', run() { P.atk += 35; } },
-  grilled_fish: { name: 'ปลาย่าง', need: { fish: 1 },            gain: 'EXP +25', run() { gainExp(25); } },
-};
-function canCraft(r) { return Object.entries(r.need).every(([k, v]) => inv[k] >= v); }
-function craft(id) {
-  const r = RECIPES[id];
-  if (!canCraft(r)) { say('วัตถุดิบไม่พอ!'); return; }
-  for (const [k, v] of Object.entries(r.need)) inv[k] -= v;
-  r.run();
-  say('✅ คราฟ [' + r.name + '] สำเร็จ! ' + r.gain);
-  refreshBag();
+function currentTagName(now) {
+  let base = 'Idle';
+  if (z > 0 || vz !== 0) base = 'Jump';
+  else if (moving) base = running ? 'Run' : 'Walk';
+  if (override && now < override.until) base = override.name;
+  else override = null;
+  const view = { w: 'Up', s: 'Down', a: 'Side', d: 'Side' }[dir];
+  return `${base}_${view}`;
 }
-window.craft = craft;
-
-// ---------- กระเป๋า ----------
-function renderBag() {
-  const needTxt = r => Object.entries(r.need).map(([k, v]) => k + ' ' + v).join(', ');
-  bagBody.innerHTML = `
-    <div class="row"><span>🪵 ไม้</span><b>${inv.wood}</b></div>
-    <div class="row"><span>🪨 หิน</span><b>${inv.stone}</b></div>
-    <div class="row"><span>⛓️ แร่เหล็ก</span><b>${inv.iron}</b></div>
-    <div class="row"><span>🐟 ปลา</span><b>${inv.fish}</b></div>
-    <hr>
-    <div class="row"><span>Lv ${P.lv} | HP ${P.hp}/${P.maxHp}</span></div>
-    <div class="row"><span>ATK ${P.atk}</span><span>EXP ${P.exp}/${P.maxExp}</span></div>
-    <hr><b>🔨 คราฟ</b>
-    ${Object.entries(RECIPES).map(([id, r]) => `
-      <div class="row">
-        <span>${r.name}<br><small>${needTxt(r)}</small></span>
-        <button ${canCraft(r) ? '' : 'disabled'} onclick="craft('${id}')">คราฟ</button>
-      </div>`).join('')}
-  `;
+let curTag = '', animStart = 0;
+function playerFrame(tagName, now) {
+  if (tagName !== curTag) { curTag = tagName; animStart = now; }
+  const tag = TAG[tagName];
+  if (!tag) return null;
+  const total = tag.durations.reduce((a, b) => a + b, 0);
+  let ms = (now - animStart) % total, i = 0;
+  while (ms >= tag.durations[i]) { ms -= tag.durations[i]; i++; }
+  return { tag, frame: i };
 }
-function refreshBag() { if (bagOpen) renderBag(); }
-function toggleBag() {
-  bagOpen = !bagOpen;
-  bagEl.style.display = bagOpen ? 'block' : 'none';
-  if (bagOpen) renderBag();
+function drawPlayer(bx, by, now) {
+  const f = playerFrame(currentTagName(now), now);
+  if (!f) return;
+  const S = SPRITE_SCALE, size = CELL * S;
+  const dx = bx + 4 - 25 * S, dy = by + 10 - 47 * S - Math.round(z);
+  const sx = f.frame * CELL, sy = f.tag.row * CELL;
+  g.save();
+  if (dir === 'a') {
+    g.translate(dx + size, 0); g.scale(-1, 1);
+    g.drawImage(assets.sheet, sx, sy, CELL, CELL, 0, dy, size, size);
+  } else {
+    g.drawImage(assets.sheet, sx, sy, CELL, CELL, dx, dy, size, size);
+  }
+  g.restore();
 }
 
-// ---------- อินพุต: คีย์บอร์ด ----------
+// =====================================================
+// อินพุต: คีย์บอร์ด
+// =====================================================
 const keys = {};
 addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
   if (!e.repeat) {
     if (k === ' ') jump();
-    if (k === 'j') attack();
-    if (k === 'f') fish();
-    if (k === 'i') toggleBag();
+    if (k === 'j') punch();
   }
   keys[k] = true;
 });
 addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-// ---------- อินพุต: จอยเสมือน ----------
+// =====================================================
+// อินพุต: จอยเสมือนและปุ่มสัมผัส
+// =====================================================
 const joyEl = document.getElementById('joy');
 const knob = document.getElementById('knob');
 const joy = { x: 0, y: 0, run: false };
@@ -421,18 +287,16 @@ joyEl.addEventListener('pointermove', joyMove);
 joyEl.addEventListener('pointerup', joyEnd);
 joyEl.addEventListener('pointercancel', joyEnd);
 
-// ---------- ปุ่มสัมผัส ----------
 function bind(id, fn) {
   document.getElementById(id).addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
 }
 bind('bJump', jump);
-bind('bAtk', attack);
-bind('bFish', fish);
-bind('bBag', toggleBag);
-document.getElementById('bagClose').onclick = toggleBag;
+bind('bPunch', punch);
 
-// ---------- อินพุต: Gamepad ----------
-// A=กระโดด, X=ตี, B=ตกปลา, Y=กระเป๋า, LB/RB=วิ่ง, D-pad/สติ๊กซ้าย=เดิน
+// =====================================================
+// อินพุต: Gamepad
+// เดิน: D-pad/สติ๊กซ้าย, A=กระโดด, X=ต่อย, LB/RB=วิ่ง
+// =====================================================
 const DEADZONE = 0.2;
 const gpPrev = {};
 function readGamepad() {
@@ -449,7 +313,7 @@ function readGamepad() {
     if (b[14]?.pressed) out.x -= 1;
     if (b[15]?.pressed) out.x += 1;
     if (b[4]?.pressed || b[5]?.pressed) out.run = true;
-    for (const i of [0, 1, 2, 3]) {
+    for (const i of [0, 2]) {
       const now = !!b[i]?.pressed;
       if (now && !gpPrev[i]) out.press[i] = true;
       gpPrev[i] = now;
@@ -458,19 +322,17 @@ function readGamepad() {
   return out;
 }
 
-// ---------- อัปเดต ----------
+// =====================================================
+// อัปเดตและวาด
+// =====================================================
 const clamp1 = v => Math.max(-1, Math.min(1, v));
-function update() {
-  const now = Date.now();
-
+function update(now) {
   const kx = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
   const ky = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
   const gp = readGamepad();
 
   if (gp.press[0]) jump();
-  if (gp.press[2]) attack();
-  if (gp.press[1]) fish();
-  if (gp.press[3]) toggleBag();
+  if (gp.press[2]) punch();
 
   let dx = clamp1(kx + joy.x + gp.x);
   let dy = clamp1(ky + joy.y + gp.y);
@@ -481,122 +343,59 @@ function update() {
   running = !!(keys.shift || joy.run || gp.run);
   const speed = (running ? RUN_SPEED : WALK_SPEED) * mag;
   moving = mag > 0.05;
-
   if (moving) {
-    step += 1;
     if (Math.abs(dx) >= Math.abs(dy)) dir = dx < 0 ? 'a' : 'd';
     else dir = dy < 0 ? 'w' : 's';
-    if (fishT >= 0) { fishT = -1; say('ยกเลิกตกปลาเพราะขยับ'); }
   }
-  tryMove(
-    { get x() { return px; }, set x(v) { px = v; }, get y() { return py; }, set y(v) { py = v; } },
-    dx * speed, dy * speed
-  );
+  movePlayer(dx * speed, dy * speed);
 
   if (z > 0 || vz !== 0) {
     z += vz; vz -= 0.3;
     if (z <= 0) { z = 0; vz = 0; }
   }
-
-  if (atkCD > 0) atkCD--;
-
-  if (fishT >= 0 && now >= fishT) {
-    fishT = -1;
-    inv.fish++; gainExp(15);
-    say('🐟 ได้ปลา 1 ตัว +15 EXP');
-    refreshBag();
-  }
-
-  for (const [k, t] of cleared) if (now - t > 25000) cleared.delete(k);
-  updateMobs(now);
+  if (punchCD > 0) punchCD--;
 }
 
-// ---------- วาด ----------
-
-function drawPlayer(bx, by, t) {
-  if (!spritesReady) {
-    // สำรอง: ยังไม่โหลด sprite ก็วาดตัวละครพิกเซลเดิม
-    const bob = moving && (Math.floor(step / 8) % 2) ? -1 : 0;
-    g.save();
-    if (dir === 'a') { g.translate(bx + 8, 0); g.scale(-1, 1); drawPix(FALLBACK_ROWS, FALLBACK_PAL, 0, by + bob - Math.round(z)); }
-    else drawPix(FALLBACK_ROWS, FALLBACK_PAL, bx, by + bob - Math.round(z));
-    g.restore();
-    return;
-  }
-
-  // เลือกท่าจากสถานะและทิศ
-  let action = 'Idle';
-  if (z > 0 || vz !== 0) action = 'Jump';
-  else if (moving) action = running ? 'Run' : 'Walk';
-
-  // ทิศ: Side ใช้ได้ทั้งซ้ายขวา (ซ้ายจะพลิกภาพ)
-  const view = { w: 'Up', s: 'Down', a: 'Side', d: 'Side' }[dir];
-  const tag = TAG[`${action}_${view}`];
-  if (!tag) return;
-
-  const frame = Math.floor(t / (tag.durations[0] || 100)) % tag.cols;
-  const sx = frame * CELL, sy = tag.row * CELL;
-
-  // วางให้เท้าของภาพตรงกับกลางเท้าผู้เล่น
-  // จุดเท้าในช่อง ≈ (25, 47)  ผู้เล่นมี hitbox เท้าที่ (bx+4, by+10)
-  const dx = bx + 4 - 25, dy = by + 10 - 47 - Math.round(z);
-
-  g.save();
-  if (dir === 'a') { g.translate(dx + CELL, 0); g.scale(-1, 1); g.drawImage(sheetImg, sx, sy, CELL, CELL, 0, dy, CELL, CELL); }
-  else g.drawImage(sheetImg, sx, sy, CELL, CELL, dx, dy, CELL, CELL);
-  g.restore();
-}
-
-function render(t) {
+function render(now) {
   g.fillStyle = '#000'; g.fillRect(0, 0, W, H);
   const camX = Math.round(px + 4 - W / 2), camY = Math.round(py + 5 - H / 2);
-  const t0x = Math.floor(camX / T), t0y = Math.floor(camY / T);
-  for (let ty = 0; ty <= H / T + 1; ty++)
-    for (let tx = 0; tx <= W / T + 1; tx++) {
-      const wx = t0x + tx, wy = t0y + ty;
-      drawTile(wx, wy, wx * T - camX, wy * T - camY, t);
-    }
-
-  for (const m of mobs) {
-    if (m.hp <= 0) continue;
-    const sx = Math.round(m.x) - camX, sy = Math.round(m.y) - camY;
-    if (sx < -10 || sx > W || sy < -10 || sy > H) continue;
-    drawPix(SLIME_ROWS, SLIME_PAL, sx, sy);
-    g.fillStyle = '#e53935'; g.fillRect(sx, sy - 2, 8 * m.hp / m.maxHp, 1);
-  }
-
-  if (atkCD > 14) {
-    const { ax, ay } = attackPoint();
-    g.fillStyle = 'rgba(255,255,200,0.8)';
-    g.fillRect(Math.round(ax) - camX - 2, Math.round(ay) - camY - 2, 4, 4);
-  }
-
-  drawPlayer(Math.round(px) - camX, Math.round(py) - camY, t);
-
-  if (fishT >= 0) {
-    const { ax, ay } = attackPoint();
-    g.fillStyle = '#fff'; g.fillRect(Math.round(ax) - camX, Math.round(ay) - camY - 1, 1, 2);
-  }
-
-  const day = (Math.sin(t / 30000) + 1) / 2;
-  g.fillStyle = `rgba(10,15,50,${(1 - day) * 0.6})`;
-  g.fillRect(0, 0, W, H);
+  drawMap(camX, camY);
+  drawPlayer(Math.round(px) - camX, Math.round(py) - camY, now);
 }
 
-function loop(t) {
-  update();
-  render(t);
-  hud.textContent =
-    `Lv ${P.lv} | HP ${P.hp}/${P.maxHp} | EXP ${P.exp}/${P.maxExp} | ATK ${P.atk} | พิกัด ${Math.floor(px / T)}, ${Math.floor(py / T)}`;
+function loop() {
+  const now = Date.now();
+  update(now);
+  render(now);
   requestAnimationFrame(loop);
 }
 
-// ---------- เริ่มเกม ----------
-spawnPlayer();
-spawnX = px; spawnY = py;
-for (let i = 0; i < 6; i++) mobs.push(makeMob());
-say('ยินดีต้อนรับ! กด J ตี, F ตกปลา, I กระเป๋า');
-requestAnimationFrame(loop);
+// =====================================================
+// เริ่มเกม
+// =====================================================
+async function start() {
+  const [tiles, sheet, meta] = await Promise.all([
+    loadImg(TS_FILE),
+    loadImg(SPR_DIR + 'player.png'),
+    fetchJson(SPR_DIR + 'player.json'),
+  ]);
+  assets.tiles = tiles;
+  assets.sheet = sheet;
+  TAG = Object.fromEntries(meta.tags.map(t => [t.name, t]));
+
+  const cls = classifyTiles(tiles);
+  if (!cls.grass.length) throw new Error('หาช่องหญ้าใน tileset ไม่เจอ');
+  buildMap(cls);
+
+  const s = spawnTile();
+  px = s.x; py = s.y;
+  requestAnimationFrame(loop);
+}
+
+start().catch(e => {
+  document.body.insertAdjacentHTML('beforeend', `<p id="err">เริ่มเกมไม่ได้: ${e.message}</p>`);
+  console.error(e);
+});
 </script>
 </body>
 </html>
