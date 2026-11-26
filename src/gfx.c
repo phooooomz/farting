@@ -12,7 +12,7 @@
 #define DEPTH_OFF    0x110000u       /* 512 * 272 * 2 */
 
 #define ATLAS_SIZE   512
-#define CELL         24
+#define CELL         32
 #define CELLS_PER_ROW (ATLAS_SIZE / CELL)
 
 static unsigned int __attribute__((aligned(64))) gu_list[262144];
@@ -69,15 +69,27 @@ void gfx_init(void)
     sceGuDisplay(GU_TRUE);
 
     build_atlas();
+}
+
+/* GU state lives inside the display list, so it must be set after every sceGuStart. */
+static void gfx_set_frame_state(void)
+{
+    sceGuEnable(GU_SCISSOR_TEST);
+    sceGuScissor(0, 0, SCREEN_W, SCREEN_H);
+    sceGuDepthFunc(GU_GEQUAL);
+    sceGuEnable(GU_BLEND);
+    sceGuBlendFunc(GU_ADD, GU_SRC_ALPHA, GU_ONE_MINUS_SRC_ALPHA, 0, 0);
     sceGuTexMode(GU_PSM_8888, 0, 0, 0);
     sceGuTexImage(0, ATLAS_SIZE, ATLAS_SIZE, ATLAS_SIZE, atlas);
     sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
     sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexScale(1.0f / ATLAS_SIZE, 1.0f / ATLAS_SIZE);
 }
 
 void gfx_begin_frame(uint32_t clear_color)
 {
     sceGuStart(GU_DIRECT, gu_list);
+    gfx_set_frame_state();
     sceGuClearColor(clear_color);
     sceGuClearDepth(0);
     sceGuClear(GU_COLOR_BUFFER_BIT | GU_DEPTH_BUFFER_BIT);
@@ -210,7 +222,6 @@ void gfx_text(int x, int baseline_y, const char *utf8, uint32_t color)
     if (t.n == 0) return;
     sceGuDisable(GU_DEPTH_TEST);
     sceGuEnable(GU_TEXTURE_2D);
-    sceGuTexScale(1.0f / ATLAS_SIZE, 1.0f / ATLAS_SIZE);
     sceGuDrawArray(GU_SPRITES, GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_2D, t.n, 0, v);
     sceGuDisable(GU_TEXTURE_2D);
 }
