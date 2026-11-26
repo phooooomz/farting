@@ -13,7 +13,8 @@ canvas {
   width: min(100vw, 133vh); height: auto; aspect-ratio: 4 / 3;
   background: #000; display: block;
 }
-#hud { position: fixed; top: 8px; left: 10px; font-size: 14px; text-shadow: 1px 1px #000; pointer-events: none; }
+#hud { position: fixed; top: 8px; left: 10px; font-size: 13px; text-shadow: 1px 1px #000; pointer-events: none; }
+#msg { position: fixed; top: 38px; left: 50%; transform: translateX(-50%); font-size: 15px; text-shadow: 1px 1px #000; pointer-events: none; transition: opacity .4s; opacity: 0; white-space: nowrap; }
 
 #joy {
   position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px;
@@ -26,19 +27,91 @@ canvas {
   margin: -25px 0 0 -25px; border-radius: 50%;
   background: rgba(255,255,255,0.45); pointer-events: none;
 }
+
+#btns { position: fixed; right: 20px; bottom: 20px; display: grid; grid-template-columns: repeat(2, 70px); gap: 12px; }
+.btn {
+  width: 70px; height: 70px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.15);
+  color: #fff; font-size: 12px; font-weight: bold; line-height: 1.2;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+.btn:active { background: rgba(255,255,255,0.35); }
+
+#bag {
+  position: fixed; inset: 0; margin: auto; width: 280px; height: max-content; max-height: 80%;
+  overflow: auto; box-sizing: border-box; padding: 14px; display: none;
+  background: rgba(15,20,28,0.96); border: 2px solid #444; border-radius: 10px;
+}
+#bag h3 { margin: 0 0 8px; }
+#bag .row { display: flex; justify-content: space-between; align-items: center; margin: 6px 0; font-size: 14px; }
+#bag button { background: #2f6fd6; color: #fff; border: 0; border-radius: 6px; padding: 6px 10px; font-size: 13px; }
+#bag button:disabled { background: #444; color: #888; }
+#bag hr { border: 0; border-top: 1px solid #333; margin: 10px 0; }
+#bagClose { margin-top: 10px; width: 100%; background: #555 !important; }
 </style>
 </head>
 <body>
 <canvas id="c" width="256" height="192"></canvas>
 <div id="hud"></div>
+<div id="msg"></div>
 <div id="joy"><div id="knob"></div></div>
+<div id="btns">
+  <button class="btn" id="bJump">กระโดด<br>Space</button>
+  <button class="btn" id="bAtk">ตี<br>J</button>
+  <button class="btn" id="bFish">ตกปลา<br>F</button>
+  <button class="btn" id="bBag">กระเป๋า<br>I</button>
+</div>
+<div id="bag">
+  <h3>🎒 กระเป๋า</h3>
+  <div id="bagBody"></div>
+  <button id="bagClose">ปิด</button>
+</div>
+
 <script>
+// =====================================================
+// ตั้งค่าไฟล์ sprite (ปรับตรงนี้เมื่อไฟล์เปลี่ยน)
+// =====================================================
+const SPR_DIR = 'assets/sprites/';
+const FW = 16, FH = 32;                       // ขนาดเฟรมในไฟล์ PNG
+const SHEETS = {
+  idle: { file: '16x32_Idle-Sheet.png',   frames: 2, fps: 0.5 },   // วินาทีต่อเฟรม
+  walk: { file: '16x32_Walk-Sheet.png',   frames: 4, fps: 0.15 },
+  run:  { file: '16x32_Run-Sheet.png',    frames: 4, fps: 0.09 },
+  jump: { file: '16x32_Jump-Sheet_1.png', frames: 1, fps: 0.1 },
+};
+// แถวของแต่ละทิศในไฟล์ (ปรับตามผลจาก sheet-debug)
+const DIR_ROW = { down: 0, left: 1, right: 2, up: 3 };
+
+// ความเร็ว (แก้ตรงนี้เพื่อปรับสปีด)
+const WALK_SPEED = 1.3;
+const RUN_SPEED  = 2.2;
+const JUMP_POWER = 3.2;
+const JOY_RUN_AT = 0.9;   // ดันจอยเกินเท่านี้ = วิ่ง (0..1)
+
+// โหลดรูป sprite
+const sheetImg = {};
+let spritesReady = false;
+for (const k in SHEETS) {
+  const img = new Image();
+  img.onload = () => { spritesReady = Object.keys(SHEETS).every(n => sheetImg[n]?.complete && sheetImg[n].naturalWidth > 0); };
+  img.onerror = () => console.warn('โหลดรูปไม่ได้:', SPR_DIR + SHEETS[k].file);
+  img.src = SPR_DIR + SHEETS[k].file;
+  sheetImg[k] = img;
+}
+
+// =====================================================
+// พื้นฐานเกม
+// =====================================================
 const cv = document.getElementById('c'), g = cv.getContext('2d');
 g.imageSmoothingEnabled = false;
 const W = 256, H = 192, T = 16;
 const SEED = Math.random() * 1e9 | 0;
+const hud = document.getElementById('hud');
+const msgEl = document.getElementById('msg');
+const bagEl = document.getElementById('bag');
+const bagBody = document.getElementById('bagBody');
 
-// ---------- ฟังก์ชันสุ่มแบบกำหนดค่าได้ (noise) ----------
+// ---------- noise / โลก ----------
 function hash(x, y, s = 0) {
   let h = (x * 374761393 + y * 668265263 + s * 982451653 + SEED) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -54,27 +127,33 @@ function fbm(x, y, s) {
   return vnoise(x / 24, y / 24, s) * 0.6 + vnoise(x / 10, y / 10, s + 7) * 0.3 + vnoise(x / 5, y / 5, s + 13) * 0.1;
 }
 
-// ---------- ชนิดของพื้น ----------
-const T_WATER = 0, T_SAND = 1, T_GRASS = 2, T_FOREST = 3, T_STONE = 4, T_SNOW = 5;
-const SOLID = new Set([T_WATER, T_FOREST, T_STONE]);
+const T_WATER = 0, T_SAND = 1, T_GRASS = 2, T_FOREST = 3, T_STONE = 4, T_SNOW = 5, T_ORE = 6;
+const SOLID = new Set([T_WATER, T_FOREST, T_STONE, T_ORE]);
 const COL = {
   [T_WATER]: ['#2b6cb0', '#3d8bd9'], [T_SAND]: ['#e2c275', '#d4b06a'],
   [T_GRASS]: ['#4a8f3a', '#5ca548'], [T_FOREST]: ['#2d6a2b', '#24571f'],
   [T_STONE]: ['#7a7d86', '#8f939c'], [T_SNOW]: ['#eef3f7', '#d3dee8'],
+  [T_ORE]:   ['#7a7d86', '#8f939c'],
 };
-function tileAt(tx, ty) {
+
+function baseTile(tx, ty) {
   const e = fbm(tx, ty, 1);
   if (e < 0.36) return T_WATER;
   if (e < 0.41) return T_SAND;
-  if (e > 0.72) return e > 0.8 ? T_SNOW : T_STONE;
+  if (e > 0.72) return e > 0.8 ? T_SNOW : (hash(tx, ty, 60) > 0.75 ? T_ORE : T_STONE);
   if (fbm(tx, ty, 5) > 0.56 && hash(tx, ty, 9) > 0.35) return T_FOREST;
   return T_GRASS;
 }
+const cleared = new Map();   // key -> เวลาที่ถูกตัด/ขุด
+const nodeHp = new Map();    // key -> HP ที่เหลือของต้นไม้/หิน/แร่
+function kindAt(tx, ty) {
+  const k = baseTile(tx, ty);
+  if ((k === T_FOREST || k === T_STONE || k === T_ORE) && cleared.has(tx + ',' + ty)) return T_GRASS;
+  return k;
+}
 
-// ---------- วาดพื้น / ต้นไม้ / เหรียญ ----------
-const collected = new Set();
 function drawTile(tx, ty, sx, sy, t) {
-  const k = tileAt(tx, ty);
+  const k = kindAt(tx, ty);
   const [c1, c2] = COL[k];
   g.fillStyle = c1; g.fillRect(sx, sy, T, T);
   g.fillStyle = c2;
@@ -92,42 +171,238 @@ function drawTile(tx, ty, sx, sy, t) {
     g.fillStyle = '#1f4d1c'; g.fillRect(sx + 2, sy + 2, 12, 9);
     g.fillStyle = '#3a8a34'; g.fillRect(sx + 4, sy + 3, 4, 3);
   }
+  if (k === T_ORE) {
+    g.fillStyle = '#e89a3c'; g.fillRect(sx + 4, sy + 5, 2, 2); g.fillRect(sx + 10, sy + 10, 2, 2);
+  }
   if (k === T_GRASS && hash(tx, ty, 30) > 0.9) {
     g.fillStyle = '#f5e663'; g.fillRect(sx + 7, sy + 7, 2, 2);
     g.fillStyle = '#e8533a'; g.fillRect(sx + 3, sy + 11, 2, 2);
   }
-  if (!SOLID.has(k) && hash(tx, ty, 21) > 0.985 && !collected.has(tx + ',' + ty)) {
-    const bob = (Math.floor(t / 250) + tx) % 2;
-    g.fillStyle = '#ffd700'; g.fillRect(sx + 6, sy + 5 + bob, 4, 6);
-    g.fillStyle = '#fff3a0'; g.fillRect(sx + 7, sy + 6 + bob, 1, 2);
-  }
 }
 
-// ---------- ตัวละคร (pixel sprite 8x10) ----------
-const PAL = { H: '#6b3a1a', S: '#f1c27d', K: '#111', B: '#2f6fd6', P: '#2b2b3a' };
-const SPR = [
+// ---------- sprite ผู้เล่น ----------
+function drawPix(rows, pal, x, y) {
+  rows.forEach((row, r) => [...row].forEach((c, i) => {
+    if (pal[c]) { g.fillStyle = pal[c]; g.fillRect(x + i, y + r, 1, 1); }
+  }));
+}
+const FALLBACK_ROWS = [
   '..HHHH..', '.HHHHHH.', '.HSSSSH.', '.SKSSKS.', '.SSSSSS.',
   '..SSSS..', '.BBBBBB.', 'BBBBBBBB', 'BBBBBBBB', '..PP.PP.',
 ];
-function drawSprite(x, y, flip) {
-  g.save();
-  if (flip) { g.translate(x + 8, 0); g.scale(-1, 1); x = 0; }
-  SPR.forEach((row, r) => [...row].forEach((c, i) => {
-    if (PAL[c]) { g.fillStyle = PAL[c]; g.fillRect(x + i, y + r, 1, 1); }
-  }));
-  g.restore();
+const FALLBACK_PAL = { H: '#6b3a1a', S: '#f1c27d', K: '#111', B: '#2f6fd6', P: '#2b2b3a' };
+const SLIME_ROWS = [
+  '..GGGG..', '.GGGGGG.', 'GGKGGKGG', 'GGGGGGGG', 'GGGGGGGG', '.GGGGGG.', 'G......G',
+];
+const SLIME_PAL = { G: '#5fd35f', K: '#111' };
+
+// ---------- สถานะผู้เล่น ----------
+const P = { hp: 100, maxHp: 100, atk: 10, lv: 1, exp: 0, maxExp: 50 };
+const inv = { wood: 0, stone: 0, iron: 0, fish: 0 };
+let px = 0, py = 0, dir = 'd', step = 0, moving = false, running = false;
+let z = 0, vz = 0;
+let atkCD = 0;
+let fishT = -1;
+let spawnX = 0, spawnY = 0;
+let bagOpen = false;
+const DIRV = { a: [-1, 0], d: [1, 0], w: [0, -1], s: [0, 1] };
+const DIR_NAME = { a: 'left', d: 'right', w: 'up', s: 'down' };
+
+function say(t) {
+  msgEl.textContent = t;
+  msgEl.style.opacity = 1;
+  clearTimeout(say.t);
+  say.t = setTimeout(() => msgEl.style.opacity = 0, 2500);
+}
+
+function gainExp(n) {
+  P.exp += n;
+  while (P.exp >= P.maxExp) {
+    P.exp -= P.maxExp;
+    P.lv++;
+    P.maxExp = Math.floor(P.maxExp * 1.5);
+    P.atk += 5;
+    P.maxHp += 20;
+    P.hp = P.maxHp;
+    say('🎉 เลเวลอัป! Lv.' + P.lv);
+  }
+}
+
+function hurt(n) {
+  P.hp -= n;
+  if (P.hp <= 0) {
+    say('💀 ตายแล้ว กลับจุดเกิด');
+    P.hp = P.maxHp;
+    px = spawnX; py = spawnY; z = 0; vz = 0;
+  }
+}
+
+// ---------- การชน ----------
+function blocked(x, y) {
+  const x0 = Math.floor((x + 1) / T), x1 = Math.floor((x + 6) / T);
+  const y0 = Math.floor((y + 6) / T), y1 = Math.floor((y + 9) / T);
+  for (let ty = y0; ty <= y1; ty++)
+    for (let tx = x0; tx <= x1; tx++)
+      if (SOLID.has(kindAt(tx, ty))) return true;
+  return false;
+}
+function tryMove(o, dx, dy) {
+  const nx = o.x + dx; if (!blocked(nx, o.y)) o.x = nx;
+  const ny = o.y + dy; if (!blocked(o.x, ny)) o.y = ny;
+}
+function randomGrassNear(cx, cy, r) {
+  const bx = Math.floor(cx / T), by = Math.floor(cy / T);
+  for (let i = 0; i < 300; i++) {
+    const tx = bx + Math.floor(Math.random() * (r * 2 + 1)) - r;
+    const ty = by + Math.floor(Math.random() * (r * 2 + 1)) - r;
+    if (kindAt(tx, ty) === T_GRASS) return { x: tx * T, y: ty * T };
+  }
+  return { x: cx, y: cy };
+}
+function spawnPlayer() {
+  for (let r = 0; r < 400; r++)
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++)
+        if (baseTile(dx, dy) === T_GRASS) { px = dx * T; py = dy * T; return; }
+}
+
+// ---------- มอนสเตอร์ ----------
+const mobs = [];
+function makeMob() {
+  const p = randomGrassNear(spawnX, spawnY, 12);
+  return { x: p.x, y: p.y, hp: 20, maxHp: 20, wander: 0, vx: 0, vy: 0, cd: 0, respawnAt: 0 };
+}
+function updateMobs(now) {
+  for (const m of mobs) {
+    if (m.hp <= 0) {
+      if (now >= m.respawnAt) {
+        const p = randomGrassNear(spawnX, spawnY, 12);
+        m.x = p.x; m.y = p.y; m.hp = m.maxHp;
+      }
+      continue;
+    }
+    const dx = px - m.x, dy = py - m.y, d = Math.hypot(dx, dy);
+    if (d < 70 && d > 0.001) {
+      m.vx = dx / d * 0.6; m.vy = dy / d * 0.6;
+    } else if (--m.wander <= 0) {
+      m.wander = 60 + Math.random() * 60;
+      const a = Math.random() * Math.PI * 2;
+      m.vx = Math.cos(a) * 0.3; m.vy = Math.sin(a) * 0.3;
+    }
+    tryMove(m, m.vx, m.vy);
+    if (m.cd > 0) m.cd--;
+    if (d < 10 && m.cd <= 0) { hurt(5); m.cd = 60; say('😖 สไลม์โจมตี -5 HP'); }
+  }
+}
+
+// ---------- ตี / เก็บเกี่ยว ----------
+function attackPoint() {
+  const [fx, fy] = DIRV[dir];
+  return { ax: px + 4 + fx * 12, ay: py + 5 + fy * 12 };
+}
+function attack() {
+  if (atkCD > 0) return;
+  atkCD = 20;
+  const { ax, ay } = attackPoint();
+
+  for (const m of mobs) {
+    if (m.hp > 0 && Math.hypot(m.x + 4 - ax, m.y + 4 - ay) < 14) {
+      m.hp -= P.atk;
+      if (m.hp <= 0) {
+        m.respawnAt = Date.now() + 8000;
+        gainExp(10);
+        say('⚔️ ฆ่าสไลม์ได้ +10 EXP');
+      } else {
+        say('⚔️ ตีสไลม์ -' + P.atk);
+      }
+      return;
+    }
+  }
+
+  const tx = Math.floor(ax / T), ty = Math.floor(ay / T), key = tx + ',' + ty;
+  const k = kindAt(tx, ty);
+  if (k === T_FOREST || k === T_STONE || k === T_ORE) {
+    if (!nodeHp.has(key)) nodeHp.set(key, k === T_FOREST ? 30 : k === T_ORE ? 50 : 40);
+    const left = nodeHp.get(key) - P.atk;
+    if (left > 0) { nodeHp.set(key, left); return; }
+    nodeHp.delete(key);
+    cleared.set(key, Date.now());
+    if (k === T_FOREST)     { inv.wood++;  gainExp(10); say('🪓 ตัดไม้ได้ +1'); }
+    else if (k === T_STONE) { inv.stone++; gainExp(15); say('⛏️ ได้หิน +1'); }
+    else                    { inv.iron++;  gainExp(25); say('⛏️ ขุดแร่เหล็ก +1'); }
+    refreshBag();
+  }
+}
+
+// ---------- กระโดด / ตกปลา ----------
+function jump() { if (z === 0 && vz === 0) vz = JUMP_POWER; }
+function fish() {
+  const { ax, ay } = attackPoint();
+  if (kindAt(Math.floor(ax / T), Math.floor(ay / T)) !== T_WATER) { say('🎣 ต้องหันหน้าเข้าหาน้ำก่อน'); return; }
+  if (fishT >= 0) return;
+  fishT = Date.now() + 2000 + Math.random() * 2000;
+  say('🎣 กำลังตกปลา...');
+}
+
+// ---------- คราฟ ----------
+const RECIPES = {
+  stone_sword:  { name: 'ดาบหิน',   need: { wood: 3, stone: 2 }, gain: 'ATK +15', run() { P.atk += 15; } },
+  iron_sword:   { name: 'ดาบเหล็ก', need: { iron: 3, wood: 2 },  gain: 'ATK +35', run() { P.atk += 35; } },
+  grilled_fish: { name: 'ปลาย่าง', need: { fish: 1 },            gain: 'EXP +25', run() { gainExp(25); } },
+};
+function canCraft(r) { return Object.entries(r.need).every(([k, v]) => inv[k] >= v); }
+function craft(id) {
+  const r = RECIPES[id];
+  if (!canCraft(r)) { say('วัตถุดิบไม่พอ!'); return; }
+  for (const [k, v] of Object.entries(r.need)) inv[k] -= v;
+  r.run();
+  say('✅ คราฟ [' + r.name + '] สำเร็จ! ' + r.gain);
+  refreshBag();
+}
+window.craft = craft;
+
+// ---------- กระเป๋า ----------
+function renderBag() {
+  const needTxt = r => Object.entries(r.need).map(([k, v]) => k + ' ' + v).join(', ');
+  bagBody.innerHTML = `
+    <div class="row"><span>🪵 ไม้</span><b>${inv.wood}</b></div>
+    <div class="row"><span>🪨 หิน</span><b>${inv.stone}</b></div>
+    <div class="row"><span>⛓️ แร่เหล็ก</span><b>${inv.iron}</b></div>
+    <div class="row"><span>🐟 ปลา</span><b>${inv.fish}</b></div>
+    <hr>
+    <div class="row"><span>Lv ${P.lv} | HP ${P.hp}/${P.maxHp}</span></div>
+    <div class="row"><span>ATK ${P.atk}</span><span>EXP ${P.exp}/${P.maxExp}</span></div>
+    <hr><b>🔨 คราฟ</b>
+    ${Object.entries(RECIPES).map(([id, r]) => `
+      <div class="row">
+        <span>${r.name}<br><small>${needTxt(r)}</small></span>
+        <button ${canCraft(r) ? '' : 'disabled'} onclick="craft('${id}')">คราฟ</button>
+      </div>`).join('')}
+  `;
+}
+function refreshBag() { if (bagOpen) renderBag(); }
+function toggleBag() {
+  bagOpen = !bagOpen;
+  bagEl.style.display = bagOpen ? 'block' : 'none';
+  if (bagOpen) renderBag();
 }
 
 // ---------- อินพุต: คีย์บอร์ด ----------
-let px = 0, py = 0, dir = 'd', step = 0, moving = false, score = 0;
 const keys = {};
 addEventListener('keydown', e => {
-  keys[e.key.toLowerCase()] = true;
+  const k = e.key.toLowerCase();
   if (e.key.startsWith('Arrow') || e.key === ' ') e.preventDefault();
+  if (!e.repeat) {
+    if (k === ' ') jump();
+    if (k === 'j') attack();
+    if (k === 'f') fish();
+    if (k === 'i') toggleBag();
+  }
+  keys[k] = true;
 });
 addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-// ---------- อินพุต: จอยสติ๊กเสมือน ----------
+// ---------- อินพุต: จอยเสมือน ----------
 const joyEl = document.getElementById('joy');
 const knob = document.getElementById('knob');
 const joy = { x: 0, y: 0, run: false };
@@ -140,9 +415,8 @@ function joyMove(e) {
   const d = Math.hypot(vx, vy);
   if (d > JOY_R) { vx *= JOY_R / d; vy *= JOY_R / d; }
   knob.style.transform = `translate(${vx}px, ${vy}px)`;
-  joy.x = vx / JOY_R;
-  joy.y = vy / JOY_R;
-  joy.run = d > JOY_R * 0.9;
+  joy.x = vx / JOY_R; joy.y = vy / JOY_R;
+  joy.run = d > JOY_R * JOY_RUN_AT;
 }
 function joyEnd(e) {
   if (e.pointerId !== joyId) return;
@@ -154,82 +428,129 @@ joyEl.addEventListener('pointerdown', e => {
   joyId = e.pointerId;
   joyEl.setPointerCapture(e.pointerId);
   const r = joyEl.getBoundingClientRect();
-  joyCX = r.left + r.width / 2;
-  joyCY = r.top + r.height / 2;
+  joyCX = r.left + r.width / 2; joyCY = r.top + r.height / 2;
   joyMove(e);
 });
 joyEl.addEventListener('pointermove', joyMove);
 joyEl.addEventListener('pointerup', joyEnd);
 joyEl.addEventListener('pointercancel', joyEnd);
 
-// ---------- อินพุต: Gamepad API ----------
+// ---------- ปุ่มสัมผัส ----------
+function bind(id, fn) {
+  document.getElementById(id).addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
+}
+bind('bJump', jump);
+bind('bAtk', attack);
+bind('bFish', fish);
+bind('bBag', toggleBag);
+document.getElementById('bagClose').onclick = toggleBag;
+
+// ---------- อินพุต: Gamepad ----------
+// A=กระโดด, X=ตี, B=ตกปลา, Y=กระเป๋า, LB/RB=วิ่ง, D-pad/สติ๊กซ้าย=เดิน
 const DEADZONE = 0.2;
+const gpPrev = {};
 function readGamepad() {
-  const out = { x: 0, y: 0, run: false };
+  const out = { x: 0, y: 0, run: false, press: {} };
   const pads = navigator.getGamepads ? navigator.getGamepads() : [];
   for (const p of pads) {
     if (!p) continue;
     let ax = p.axes[0] || 0, ay = p.axes[1] || 0;
     if (Math.hypot(ax, ay) < DEADZONE) { ax = 0; ay = 0; }
-    out.x += ax;
-    out.y += ay;
+    out.x += ax; out.y += ay;
     const b = p.buttons;
     if (b[12]?.pressed) out.y -= 1;
     if (b[13]?.pressed) out.y += 1;
     if (b[14]?.pressed) out.x -= 1;
     if (b[15]?.pressed) out.x += 1;
-    if (b[0]?.pressed || b[1]?.pressed) out.run = true;
+    if (b[4]?.pressed || b[5]?.pressed) out.run = true;
+    for (const i of [0, 1, 2, 3]) {
+      const now = !!b[i]?.pressed;
+      if (now && !gpPrev[i]) out.press[i] = true;
+      gpPrev[i] = now;
+    }
   }
   return out;
 }
 
-// ---------- สร้างโลก ----------
-function spawn() {
-  for (let r = 0; r < 400; r++)
-    for (let dy = -r; dy <= r; dy++)
-      for (let dx = -r; dx <= r; dx++)
-        if (tileAt(dx, dy) === T_GRASS) { px = dx * T; py = dy * T; return; }
-}
-function blocked(x, y) {
-  const x0 = Math.floor((x + 1) / T), x1 = Math.floor((x + 6) / T);
-  const y0 = Math.floor((y + 6) / T), y1 = Math.floor((y + 9) / T);
-  for (let ty = y0; ty <= y1; ty++)
-    for (let tx = x0; tx <= x1; tx++)
-      if (SOLID.has(tileAt(tx, ty))) return true;
-  return false;
-}
-
-// ---------- อัปเดตเกม ----------
+// ---------- อัปเดต ----------
 const clamp1 = v => Math.max(-1, Math.min(1, v));
 function update() {
+  const now = Date.now();
+
   const kx = (keys.d || keys.arrowright ? 1 : 0) - (keys.a || keys.arrowleft ? 1 : 0);
   const ky = (keys.s || keys.arrowdown ? 1 : 0) - (keys.w || keys.arrowup ? 1 : 0);
   const gp = readGamepad();
 
+  if (gp.press[0]) jump();
+  if (gp.press[2]) attack();
+  if (gp.press[1]) fish();
+  if (gp.press[3]) toggleBag();
+
   let dx = clamp1(kx + joy.x + gp.x);
   let dy = clamp1(ky + joy.y + gp.y);
-
   const mag = Math.min(1, Math.hypot(dx, dy));
   const len = Math.hypot(dx, dy);
   if (len > 0) { dx /= len; dy /= len; }
 
-  const run = !!(keys.shift || joy.run || gp.run);
-  const sp = (run ? 2.2 : 1.3) * mag;
+  running = !!(keys.shift || joy.run || gp.run);
+  const speed = (running ? RUN_SPEED : WALK_SPEED) * mag;
   moving = mag > 0.05;
 
   if (moving) {
-    step += 0.25;
+    step += 1;
     if (Math.abs(dx) >= Math.abs(dy)) dir = dx < 0 ? 'a' : 'd';
     else dir = dy < 0 ? 'w' : 's';
+    if (fishT >= 0) { fishT = -1; say('ยกเลิกตกปลาเพราะขยับ'); }
+  }
+  tryMove(
+    { get x() { return px; }, set x(v) { px = v; }, get y() { return py; }, set y(v) { py = v; } },
+    dx * speed, dy * speed
+  );
+
+  if (z > 0 || vz !== 0) {
+    z += vz; vz -= 0.3;
+    if (z <= 0) { z = 0; vz = 0; }
   }
 
-  const nx = px + dx * sp; if (!blocked(nx, py)) px = nx;
-  const ny = py + dy * sp; if (!blocked(px, ny)) py = ny;
+  if (atkCD > 0) atkCD--;
 
-  const ctx = Math.floor((px + 4) / T), cty = Math.floor((py + 5) / T), key = ctx + ',' + cty;
-  if (!collected.has(key) && !SOLID.has(tileAt(ctx, cty)) && hash(ctx, cty, 21) > 0.985) {
-    collected.add(key); score++;
+  if (fishT >= 0 && now >= fishT) {
+    fishT = -1;
+    inv.fish++; gainExp(15);
+    say('🐟 ได้ปลา 1 ตัว +15 EXP');
+    refreshBag();
   }
+
+  for (const [k, t] of cleared) if (now - t > 25000) cleared.delete(k);
+  updateMobs(now);
+}
+
+// ---------- วาด ----------
+// วาดตัวผู้เล่นจาก sprite ถ้าโหลดได้ ไม่งั้นใช้พิกเซลสำรอง
+function drawPlayer(bx, by, t) {
+  if (!spritesReady) {
+    const bob = moving && (Math.floor(step / 8) % 2) ? -1 : 0;
+    const flip = dir === 'a';
+    g.save();
+    if (flip) { g.translate(bx + 8, 0); g.scale(-1, 1); drawPix(FALLBACK_ROWS, FALLBACK_PAL, 0, by + bob - Math.round(z)); }
+    else drawPix(FALLBACK_ROWS, FALLBACK_PAL, bx, by + bob - Math.round(z));
+    g.restore();
+    return;
+  }
+
+  let anim = 'idle';
+  if (z > 0 || vz !== 0) anim = 'jump';
+  else if (moving) anim = running ? 'run' : 'walk';
+
+  const cfg = SHEETS[anim];
+  const frame = anim === 'jump' ? 0 : Math.floor(t / 1000 / cfg.fps) % cfg.frames;
+  const row = DIR_ROW[DIR_NAME[dir]];
+  const img = sheetImg[anim];
+
+  // ภาพ 16x32: ให้เท้าอยู่ตรงกับตำแหน่งผู้เล่น (hitbox 8x10 ที่ px,py)
+  const dx = bx - 4;
+  const dy = by + 10 - FH - Math.round(z);
+  g.drawImage(img, frame * FW, row * FH, FW, FH, dx, dy, FW, FH);
 }
 
 function render(t) {
@@ -241,23 +562,46 @@ function render(t) {
       const wx = t0x + tx, wy = t0y + ty;
       drawTile(wx, wy, wx * T - camX, wy * T - camY, t);
     }
-  const bob = moving && (Math.floor(step) % 2) ? -1 : 0;
-  drawSprite(Math.round(px) - camX, Math.round(py) - camY + bob, dir === 'a');
+
+  for (const m of mobs) {
+    if (m.hp <= 0) continue;
+    const sx = Math.round(m.x) - camX, sy = Math.round(m.y) - camY;
+    if (sx < -10 || sx > W || sy < -10 || sy > H) continue;
+    drawPix(SLIME_ROWS, SLIME_PAL, sx, sy);
+    g.fillStyle = '#e53935'; g.fillRect(sx, sy - 2, 8 * m.hp / m.maxHp, 1);
+  }
+
+  if (atkCD > 14) {
+    const { ax, ay } = attackPoint();
+    g.fillStyle = 'rgba(255,255,200,0.8)';
+    g.fillRect(Math.round(ax) - camX - 2, Math.round(ay) - camY - 2, 4, 4);
+  }
+
+  drawPlayer(Math.round(px) - camX, Math.round(py) - camY, t);
+
+  if (fishT >= 0) {
+    const { ax, ay } = attackPoint();
+    g.fillStyle = '#fff'; g.fillRect(Math.round(ax) - camX, Math.round(ay) - camY - 1, 1, 2);
+  }
 
   const day = (Math.sin(t / 30000) + 1) / 2;
   g.fillStyle = `rgba(10,15,50,${(1 - day) * 0.6})`;
   g.fillRect(0, 0, W, H);
 }
 
-// ---------- ลูปเกม ----------
-const hud = document.getElementById('hud');
 function loop(t) {
   update();
   render(t);
-  hud.textContent = `พิกัด ${Math.floor(px / T)}, ${Math.floor(py / T)} | เหรียญ ${score} | WASD/ลูกศร/จอย เดิน, Shift/กดสุดขอบ วิ่ง`;
+  hud.textContent =
+    `Lv ${P.lv} | HP ${P.hp}/${P.maxHp} | EXP ${P.exp}/${P.maxExp} | ATK ${P.atk} | พิกัด ${Math.floor(px / T)}, ${Math.floor(py / T)}`;
   requestAnimationFrame(loop);
 }
-spawn();
+
+// ---------- เริ่มเกม ----------
+spawnPlayer();
+spawnX = px; spawnY = py;
+for (let i = 0; i < 6; i++) mobs.push(makeMob());
+say('ยินดีต้อนรับ! กด J ตี, F ตกปลา, I กระเป๋า');
 requestAnimationFrame(loop);
 </script>
 </body>
