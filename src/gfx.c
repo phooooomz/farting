@@ -123,7 +123,9 @@ static int quad(ColVert *v, Vec3 a, Vec3 b, Vec3 c, Vec3 d, uint32_t col)
 static uint32_t shade(uint32_t c, int num, int den)
 {
     uint32_t r = ((c & 0xFF) * num) / den, g = (((c >> 8) & 0xFF) * num) / den, b = (((c >> 16) & 0xFF) * num) / den;
-    if (r > 255) r = 255; if (g > 255) g = 255; if (b > 255) b = 255;
+    if (r > 255) r = 255;
+    if (g > 255) g = 255;
+    if (b > 255) b = 255;
     return RGBA(r, g, b, 0xFF);
 }
 
